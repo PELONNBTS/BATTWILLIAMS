@@ -69,6 +69,11 @@ const sfx = {
   medal: () => [660,880,1100,1320].forEach((f,i)=>setTimeout(()=>tone(f,.12,"triangle",.07),i*90))
 };
 
+/* ---------- character art (drop assets/kattbatt.png in to use it) ---------- */
+const hero = new Image(); let heroOK = false;
+hero.onload = () => { heroOK = hero.naturalWidth > 0; };
+hero.src = "../assets/kattbatt.png";
+
 /* ---------- world ---------- */
 const GROUND = H - 70;
 const stars = Array.from({length:90}, () => ({x:Math.random()*W, y:Math.random()*GROUND*.75, r:Math.random()*1.4+.3, t:Math.random()*6}));
@@ -202,6 +207,14 @@ function drawCoin(c){
   ctx.restore();
 }
 function drawBat(){
+  if (heroOK){
+    const h = 132, sc = h / hero.naturalHeight, w = hero.naturalWidth * sc;
+    const bob = state==="dead" ? 0 : Math.sin(frame*.3)*2.5;
+    const flapS = state==="dead" ? 1 : 1 + Math.sin(frame*.45 + bat.wing*4)*.035;   // subtle wing "breathing"
+    ctx.save(); ctx.translate(bat.x + 4, bat.y + bob); ctx.rotate(bat.rot*.55); ctx.scale(flapS, 1/flapS);
+    ctx.drawImage(hero, -w*.5, -h*.5, w, h);
+    ctx.restore(); return;
+  }
   ctx.save(); ctx.translate(bat.x, bat.y); ctx.rotate(bat.rot);
   const flapA = state==="dead" ? 0 : Math.sin(frame*.35 + bat.wing*3) * .6 - bat.wing*.6;
   // wings
@@ -298,10 +311,10 @@ function update(){
     coins = coins.filter(c => c.x > -30 && !c.got);
 
     // collisions (bat hitbox ~ ellipse)
-    const r = 14;
+    const r = heroOK ? 26 : 14, rx = heroOK ? 24 : 22;   // forgiving box around his body (wing tips can clip)
     let dead = bat.y + r > GROUND || bat.y - r < -40;
     for (const t of towers){
-      if (bat.x + r*1.6 > t.x-5 && bat.x - r*1.6 < t.x + t.w + 5){
+      if (bat.x + rx > t.x-5 && bat.x - rx < t.x + t.w + 5){
         if (bat.y - r < t.gy || bat.y + r > t.gy + t.gap) dead = true;
       }
     }
@@ -314,7 +327,7 @@ function update(){
   }
   if (state === "dead"){
     deadT++;
-    if (bat.y < GROUND - 14){ bat.vy += GRAV; bat.y = Math.min(GROUND-14, bat.y + bat.vy); bat.rot = Math.min(1.6, bat.rot + .08); }
+    if (bat.y < GROUND - (heroOK?50:14)){ bat.vy += GRAV; bat.y = Math.min(GROUND-(heroOK?50:14), bat.y + bat.vy); bat.rot = Math.min(1.6, bat.rot + .08); }
   }
   for (const p of parts){ p.x += p.vx; p.y += p.vy; p.vy += .1; p.life--; }
   parts = parts.filter(p => p.life > 0);
