@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Batt Williams Baseball · $KATTBATT</title>
+<meta name="theme-color" content="#050912">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#050912;overflow:hidden;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+  body{display:flex;align-items:center;justify-content:center;font-family:Inter,system-ui,sans-serif}
+  #stage{position:relative}
+  canvas{display:block;border-radius:14px;box-shadow:0 0 60px rgba(40,70,160,.35)}
+  .hud{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;pointer-events:none}
+  .chip{pointer-events:auto;background:rgba(5,9,18,.7);border:1px solid #1e2a4a;border-radius:999px;padding:6px 12px;font-weight:800;font-size:13px;color:#eef2ff;text-decoration:none;cursor:pointer}
+  .chip:hover{border-color:#ffc83d}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div class="hud">
+    <a class="chip" href="../index.html">← Home</a>
+    <button class="chip" id="mute" type="button">🔊</button>
+  </div>
+</div>
+<script>
+(() => {
+const W = 420, H = 720;
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+let scale = 1;
+function fit(){
+  scale = Math.min(window.innerWidth / W, window.innerHeight / H);
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = W*scale + "px"; cv.style.height = H*scale + "px";
+  cv.width = W*scale*dpr; cv.height = H*scale*dpr;
+  ctx.setTransform(scale*dpr,0,0,scale*dpr,0,0);
+}
+window.addEventListener("resize", fit); fit();
+const RR = (x,y,w,h,r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x,y,w,h,r) : ctx.rect(x,y,w,h); };
+
+/* ---------- storage ---------- */
+const store = {
+  get(k,d){ try{ const v = localStorage.getItem(k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ---------- sound ---------- */
+let actx = null, muted = store.get("kb_muted", false);
+const muteBtn = document.getElementById("mute");
+muteBtn.textContent = muted ? "🔇" : "🔊";
+muteBtn.onclick = e => { e.stopPropagation(); muted = !muted; store.set("kb_muted", muted); muteBtn.textContent = muted ? "🔇" : "🔊"; };
+function tone(freq, dur, type="square", vol=.08, slide=0, delay=0){
+  if (muted) return;
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + delay;
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40,freq+slide), t+dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t+dur);
+  }catch(e){}
+}
+function noise(dur, vol=.2){
+  if (muted) return;
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const b = actx.createBuffer(1, actx.sampleRate*dur, actx.sampleRate), d = b.getChannelData(0);
+    for (let i=0;i<d.length;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/d.length, 3);
+    const s = actx.createBufferSource(), g = actx.createGain(); g.gain.value = vol;
+    s.buffer = b; s.connect(g).connect(actx.destination); s.start();
+  }catch(e){}
+}
+const sfx = {
+  swing: () => tone(300,.12,"triangle",.05,-200),
+  crack: () => { noise(.15,.35); tone(900,.08,"square",.06,-500); },
+  homer: () => [523,659,784,1047,1319].forEach((f,i)=>tone(f,.18,"square",.05,0,i*.09)),
+  strike: () => tone(200,.25,"sawtooth",.07,-80),
+  out: () => [392,330,262].forEach((f,i)=>tone(f,.25,"triangle",.08,0,i*.18)),
+  foul: () => tone(500,.12,"square",.04,-200)
+};
+
+/* ---------- scene constants ---------- */
+const PIVOT = {x:112, y:500};      // batter hands
+const SWEET_X = 188, PLATE_Y = 505;
+const RELEASE = {x:352, y:468};
+const MOON = {x:318, y:190, r:40};
+const stars = Array.from({length:70}, () => ({x:Math.random()*W, y:Math.random()*300, r:Math.random()*1.3+.3, t:Math.random()*6}));
+const crowd = Array.from({length:120}, (_,i) => ({x:(i*3.6)%W, y:318 + (i%3)*9 + Math.random()*4, c:["#2a3566","#3a2f66","#1f3a5c","#4a3a2a"][i%4], t:Math.random()*6}));
+
+const PITCHES = [
+  {name:"FASTBALL", speed:6.4, mph:[92,97], drop:0,   w:4},
+  {name:"CHANGEUP", speed:4.2, mph:[80,85], drop:0,   w:3},
+  {name:"CURVEBALL",speed:5.0, mph:[76,82], drop:.09, w:3},
+  {name:"SLIDER",   speed:5.6, mph:[84,89], drop:.04, w:2},
+  {name:"HEATER",   speed:8.0, mph:[99,103],drop:0,   w:0}
+];
+
+/* ---------- state ---------- */
+let state = "title"; // title | play | over
+let frame=0, strikes, total, homers, longest, streak, best = store.get("kb_bb_best",0), bestHR = store.get("kb_bb_longest",0);
+let phase, phaseT, pitch, ball, swing, hitBall, msg, parts, shake, flash, moonHit, pitchNo, newBest, overT, fireworks;
+
+function reset(){
+  strikes=0; total=0; homers=0; longest=0; streak=0; pitchNo=0; newBest=false; overT=0;
+  parts=[]; fireworks=[]; shake=0; flash=0; moonHit=0; msg=null;
+  swing={t:-1, used:false}; hitBall=null; ball=null;
+  nextPitch(50);
+}
+function nextPitch(wait=70){
+  phase="wait"; phaseT=wait; ball=null; hitBall=null; swing={t:-1,used:false};
+}
+function choosePitch(){
+  pitchNo++;
+  const pool = PITCHES.map(p => ({...p, w: p.name==="HEATER" ? (pitchNo>6 ? 1+Math.floor(pitchNo/6) : 0) : p.w}));
+  let r = Math.random() * pool.reduce((a,p)=>a+p.w,0);
+  for (const p of pool){ r -= p.w; if (r <= 0) return p; }
+  return pool[0];
+}
+function throwPitch(){
+  const p = pitch;
+  const ramp = 1 + Math.min(.35, pitchNo*.015);
+  const targetY = PLATE_Y + (Math.random()-.5)*16;
+  const dist = RELEASE.x - SWEET_X;
+  const frames = dist / (p.speed*ramp);
+  const vy0 = (targetY - RELEASE.y - .5*p.drop*frames*frames) / frames;
+  ball = {x:RELEASE.x, y:RELEASE.y, vx:-p.speed*ramp, vy:vy0, drop:p.drop, trail:[]};
+  const mph = p.mph[0] + Math.floor(Math.random()*(p.mph[1]-p.mph[0]+1)) + Math.floor(ramp*3-3);
+  msg = {t:`${p.name} · ${mph} MPH`, c:"#9aa6c7", life:90, small:true};
+}
+
+/* ---------- input ---------- */
+const shareBtn = {x:W/2-95, y:0, w:190, h:44};
+function press(e){
+  if (e && e.target && e.target.closest && e.target.closest(".chip")) return;
+  if (e && e.preventDefault) e.preventDefault();
+  if (state === "title"){ state="play"; reset(); return; }
+  if (state === "over"){
+    if (e && e.clientX !== undefined){
+      const r = cv.getBoundingClientRect(), x=(e.clientX-r.left)/scale, y=(e.clientY-r.top)/scale;
+      if (x>shareBtn.x && x<shareBtn.x+shareBtn.w && y>shareBtn.y && y<shareBtn.y+shareBtn.h){
+        const t = `I hit ${homers} homers (longest ${longest} ft) for ${total} pts in Batt Williams Baseball 🦇⚾ $KATTBATT`;
+        window.open("https://x.com/intent/post?text="+encodeURIComponent(t)+"&url="+encodeURIComponent(location.href),"_blank","noopener");
+        return;
+      }
+    }
+    if (overT > 50){ state="play"; reset(); }
+    return;
+  }
+  if (state === "play" && phase === "pitch" && !swing.used && swing.t < 0){
+    swing = {t:0, used:true, contactChecked:false}; sfx.swing();
+  }
+}
+cv.addEventListener("pointerdown", press);
+window.addEventListener("keydown", e => { if (["Space","Enter","KeyS"].includes(e.code)){ e.preventDefault(); press(null); }});
+
+/* ---------- swing / contact ---------- */
+const SWING_LEN = 18, CONTACT_F = 11, START_A = -2.35, END_A = 1.15;
+function batAngle(){
+  if (swing.t < 0) return START_A + Math.sin(frame*.06)*.06;
+  const k = Math.min(1, swing.t / SWING_LEN);
+  const e = k < .5 ? 2*k*k : 1 - Math.pow(-2*k+2,2)/2;
+  return START_A + (END_A - START_A) * e;
+}
+function checkContact(){
+  if (!ball || phase !== "pitch") { return; }
+  const dx = ball.x - SWEET_X, dy = ball.y - PLATE_Y;
+  const WIN = 48;
+  if (Math.abs(dx) < WIN && Math.abs(dy) < 30){
+    const q = 1 - Math.abs(dx)/WIN;     // 0..1 timing quality
+    const early = dx > 0;
+    sfx.crack(); shake = 6 + q*10;
+    for (let i=0;i<16;i++) parts.push({x:ball.x,y:ball.y,vx:(Math.random()-.2)*7,vy:(Math.random()-.5)*7,life:28,c:"#fff",s:2.5});
+    if (q > .72){
+      const perfect = q > .93;
+      const ft = Math.round(400 + q*80 + Math.random()*25 + (perfect?40:0));
+      startFlight("homer", ft, perfect);
+    } else if (q > .38){
+      const ft = Math.round(180 + q*260 + Math.random()*30);
+      startFlight(q > .6 ? "deep" : "hit", ft);
+    } else {
+      startFlight("foul", 0, false, early);
+    }
+    ball = null; phase = "result";
+  }
+}
+function startFlight(kind, ft, perfect=false, early=false){
+  const sx = SWEET_X, sy = PLATE_Y;
+  if (kind === "homer"){
+    const tx = perfect ? MOON.x : 250 + Math.random()*170, ty = perfect ? MOON.y : 60 + Math.random()*140;
+    hitBall = {kind, ft, perfect, t:0, dur: perfect?70:60, sx, sy, tx, ty, cx:(sx+tx)/2 - 40, cy:-80, trail:[]};
+  } else if (kind === "foul"){
+    hitBall = {kind, t:0, dur:40, sx, sy, tx: early ? W+40 : -40, ty: 120, cx: early? 320 : 60, cy: 150, trail:[]};
+  } else {
+    const tx = 260 + (ft-180)/300*140, ty = 395;
+    hitBall = {kind, ft, t:0, dur:55, sx, sy, tx, ty, cx:(sx+tx)/2, cy: kind==="deep"? 160 : 280, trail:[]};
+  }
+}
+function resolveFlight(){
+  const b = hitBall;
+  if (b.kind === "homer"){
+    streak++;
+    const mult = Math.min(5, streak);
+    const pts = b.ft * 2 * mult;
+    total += pts; homers++; longest = Math.max(longest, b.ft);
+    sfx.homer(); flash = .6;
+    if (b.perfect){ moonHit = 1; msg = {t:`OVER THE MOON! ${b.ft} FT`, c:"#ffc83d", life:120, sub: `+${pts}${mult>1?`  ·  ${mult}x STREAK`:""}`}; }
+    else msg = {t:`HOME RUN! ${b.ft} FT`, c:"#ffc83d", life:110, sub:`+${pts}${mult>1?`  ·  ${mult}x STREAK`:""}`};
+    for (let i=0;i<5;i++) fireworks.push({x:60+Math.random()*300, y:80+Math.random()*180, t:-i*12, c:["#ffc83d","#ff4d5a","#7bff9e","#7b5cff","#6ad1ff"][i]});
+  } else if (b.kind === "foul"){
+    msg = {t:"FOUL BALL", c:"#cdd5ee", life:70}; sfx.foul();
+  } else {
+    streak = 0;
+    total += b.ft; longest = Math.max(longest, b.ft);
+    msg = {t: b.kind==="deep" ? `DEEP FLY · ${b.ft} FT` : `BASE HIT · ${b.ft} FT`, c:"#7bff9e", life:90, sub:`+${b.ft}`};
+  }
+  nextPitch(80);
+}
+function strike(text){
+  strikes++; streak = 0; sfx.strike(); shake = 4;
+  msg = {t: strikes>=3 ? "STRIKE THREE!" : text, c:"#ff4d5a", life:80};
+  if (strikes >= 3){
+    setTimeout(sfx.out, 350);
+    state = "over"; overT = 0;
+    if (total > best){ best = total; store.set("kb_bb_best", best); newBest = true; }
+    if (longest > bestHR){ bestHR = longest; store.set("kb_bb_longest", bestHR); }
+  } else nextPitch(80);
+}
+
+/* ---------- update ---------- */
+function update(){
+  frame++;
+  if (state === "play"){
+    if (phase === "wait"){ if (--phaseT <= 0){ phase="windup"; phaseT=46; pitch = choosePitch(); } }
+    else if (phase === "windup"){ if (--phaseT <= 0){ phase="pitch"; throwPitch(); } }
+    else if (phase === "pitch" && ball){
+      ball.vy += ball.drop; ball.x += ball.vx; ball.y += ball.vy;
+      ball.trail.push({x:ball.x,y:ball.y}); if (ball.trail.length>8) ball.trail.shift();
+      if (ball.x < 70){ ball = null; phase="result"; strike(swing.used ? "SWING & MISS" : "STRIKE — LOOKING"); }
+    }
+    if (swing.t >= 0){
+      swing.t++;
+      if (swing.t === CONTACT_F) checkContact();
+      if (swing.t > SWING_LEN + 14) swing.t = -1;
+    }
+    if (hitBall){
+      const b = hitBall; b.t++;
+      const k = Math.min(1, b.t/b.dur), u = 1-k;
+      b.x = u*u*b.sx + 2*u*k*b.cx + k*k*b.tx;
+      b.y = u*u*b.sy + 2*u*k*b.cy + k*k*b.ty;
+      b.trail.push({x:b.x,y:b.y}); if (b.trail.length>14) b.trail.shift();
+      if (b.t === b.dur) resolveFlight();
+      if (b.t > b.dur + 30) hitBall = null;
+    }
+  }
+  if (state === "over") overT++;
+  if (msg && --msg.life <= 0) msg = null;
+  for (const p of parts){ p.x+=p.vx; p.y+=p.vy; p.vy+=.15; p.life--; } parts = parts.filter(p=>p.life>0);
+  for (const f of fireworks){
+    f.t++;
+    if (f.t === 1){ tone(200+Math.random()*200,.3,"sawtooth",.03,-100); for (let i=0;i<26;i++){ const a=i/26*6.283; parts.push({x:f.x,y:f.y,vx:Math.cos(a)*3.2,vy:Math.sin(a)*3.2,life:45,c:f.c,s:3}); } }
+  }
+  fireworks = fireworks.filter(f => f.t < 2);
+  shake *= .85; flash *= .9; moonHit *= .97;
+}
+
+/* ---------- draw ---------- */
+function text(t,x,y,size,color="#fff",align="center",font="Bungee"){
+  ctx.font = `${size}px ${font}, sans-serif`; ctx.textAlign=align; ctx.textBaseline="middle";
+  ctx.lineWidth=Math.max(3,size/7); ctx.strokeStyle="#050912"; ctx.strokeText(t,x,y);
+  ctx.fillStyle=color; ctx.fillText(t,x,y);
+}
+function drawScene(){
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#050912"); g.addColorStop(.45,"#12204d"); g.addColorStop(1,"#0b1224");
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  for (const s of stars){ s.t+=.03; ctx.globalAlpha=.35+Math.sin(s.t)*.3; ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill(); }
+  ctx.globalAlpha=1;
+  // moon
+  const glow = 110 + moonHit*120;
+  const mg = ctx.createRadialGradient(MOON.x,MOON.y,10,MOON.x,MOON.y,glow);
+  mg.addColorStop(0,`rgba(255,230,150,${.35+moonHit*.5})`); mg.addColorStop(1,"rgba(255,230,150,0)");
+  ctx.fillStyle=mg; ctx.fillRect(MOON.x-glow,MOON.y-glow,glow*2,glow*2);
+  ctx.save(); ctx.translate(MOON.x + (moonHit>.1?(Math.random()-.5)*moonHit*8:0), MOON.y);
+  ctx.fillStyle="#ffe9a8"; ctx.beginPath(); ctx.arc(0,0,MOON.r,0,7); ctx.fill();
+  ctx.fillStyle="rgba(210,170,80,.35)"; [[-12,-10,9],[14,12,7],[4,-16,4],[-6,16,5]].forEach(([x,y,r])=>{ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();});
+  ctx.restore();
+  // light towers
+  for (const lx of [40, 380]){
+    ctx.fillStyle="#1a2244"; ctx.fillRect(lx-3,210,6,120);
+    ctx.fillStyle="#2c3a6b"; RR(lx-22,196,44,18,4); ctx.fill();
+    ctx.fillStyle="#fff7d0"; for (let i=0;i<4;i++) ctx.fillRect(lx-18+i*10,200,7,9);
+    const lg = ctx.createRadialGradient(lx,205,0,lx,205,90); lg.addColorStop(0,"rgba(255,247,208,.25)"); lg.addColorStop(1,"rgba(255,247,208,0)");
+    ctx.fillStyle=lg; ctx.fillRect(lx-90,115,180,180);
+  }
+  // stands + crowd
+  ctx.fillStyle="#141c3a"; ctx.fillRect(0,305,W,50);
+  for (const c of crowd){ c.t+=.1; const bob = (hitBall && hitBall.kind==="homer") || moonHit>.3 ? Math.abs(Math.sin(c.t))*5 : 0;
+    ctx.fillStyle=c.c; ctx.beginPath(); ctx.arc(c.x, c.y-bob, 3.2, 0, 7); ctx.fill(); ctx.fillRect(c.x-3, c.y+2-bob, 6, 6); }
+  // outfield wall
+  ctx.fillStyle="#0f3d2e"; ctx.fillRect(0,352,W,26);
+  ctx.fillStyle="#ffc83d"; ctx.fillRect(0,352,W,3);
+  ctx.fillStyle="rgba(255,255,255,.7)"; ctx.font="800 11px Inter"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText("$KATTBATT   ·   THE BAT THAT SWINGS BACK   ·   $KATTBATT", W/2, 366);
+  // grass w/ mow stripes
+  for (let i=0;i<8;i++){ ctx.fillStyle = i%2 ? "#17602f" : "#1b6d36"; ctx.fillRect(0,378+i*22,W,22); }
+  // infield dirt
+  ctx.fillStyle="#8a5a2b"; ctx.beginPath(); ctx.ellipse(230,540,260,70,0,0,7); ctx.fill();
+  ctx.fillStyle="#9c6a36"; ctx.beginPath(); ctx.ellipse(350,488,48,14,0,0,7); ctx.fill(); // mound
+  ctx.fillStyle="#fff"; ctx.fillRect(338,482,22,4);
+  // plate + box
+  ctx.fillStyle="#fff"; ctx.beginPath(); ctx.moveTo(150,540); ctx.lineTo(186,540); ctx.lineTo(194,546); ctx.lineTo(168,552); ctx.lineTo(142,546); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle="rgba(255,255,255,.6)"; ctx.lineWidth=2; ctx.strokeRect(70,528,70,30);
+  // lower bar
+  ctx.fillStyle="#0b1224"; ctx.fillRect(0,610,W,H-610);
+}
+function drawPitcher(){
+  const x=352, y=486;
+  let arm = -0.6, lean = 0, leg = 0;
+  if (state==="play" && phase==="windup"){ const k = 1 - phaseT/46; leg = Math.sin(k*Math.PI)*.9; arm = -0.6 - k*2.2; lean = -k*.15; }
+  else if (state==="play" && phase==="pitch" && ball && RELEASE.x - ball.x < 60){ arm = 1.2; lean = .25; }
+  ctx.save(); ctx.translate(x,y); ctx.rotate(lean);
+  ctx.strokeStyle="#d8dde8"; ctx.lineWidth=7; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(0,-30); ctx.lineTo(-6,0); ctx.moveTo(0,-30); ctx.lineTo(6 + leg*-14, -leg*16); ctx.stroke(); // legs
+  ctx.fillStyle="#e8434b"; RR(-11,-62,22,34,6); ctx.fill(); // jersey
+  ctx.fillStyle="#fff"; ctx.font="900 11px Inter"; ctx.textAlign="center"; ctx.fillText("K",0,-44);
+  ctx.save(); ctx.translate(-2,-56); ctx.rotate(-Math.PI/2 + arm); ctx.strokeStyle="#e8434b"; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-24); ctx.stroke();
+  if (phase==="windup" || !ball){ ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(0,-26,4,0,7); ctx.fill(); }
+  ctx.restore();
+  ctx.fillStyle="#c68b5a"; ctx.beginPath(); ctx.arc(0,-72,10,0,7); ctx.fill(); // head
+  ctx.fillStyle="#1b2b5c"; ctx.beginPath(); ctx.arc(0,-75,10,Math.PI,0); ctx.fill(); ctx.fillRect(-14,-76,10,4); // cap faces left
+  ctx.restore();
+}
+function drawKattBatt(){
+  const a = batAngle();
+  const hover = Math.sin(frame*.1)*3;
+  ctx.save(); ctx.translate(PIVOT.x, PIVOT.y + hover);
+  // wings (flap on the handle end)
+  const f = Math.sin(frame*.3)*.5;
+  for (const s of [-1,1]){
+    ctx.save(); ctx.rotate(s*(.4+f*.5) - Math.PI/2);
+    ctx.fillStyle="#3a2470"; ctx.strokeStyle="#1a0f38"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(s*18,-30,s*44,-26); ctx.lineTo(s*34,-16); ctx.lineTo(s*44,-8); ctx.lineTo(s*30,-4); ctx.lineTo(s*34,4); ctx.quadraticCurveTo(s*14,4,0,0); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.rotate(a);
+  // bat body: handle at origin, barrel outward (length ~92)
+  const wood = ctx.createLinearGradient(0,-12,0,12);
+  wood.addColorStop(0,"#f0c98a"); wood.addColorStop(.5,"#d49a52"); wood.addColorStop(1,"#9c6a2e");
+  ctx.fillStyle=wood; ctx.strokeStyle="#5a3a14"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-8,-4); ctx.lineTo(30,-6); ctx.quadraticCurveTo(55,-13,82,-12); ctx.quadraticCurveTo(94,-11,94,0);
+  ctx.quadraticCurveTo(94,11,82,12); ctx.quadraticCurveTo(55,13,30,6); ctx.lineTo(-8,4); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle="#1b1b1b"; ctx.beginPath(); ctx.ellipse(-9,0,4,7,0,0,7); ctx.fill();
+  ctx.fillStyle="#e8434b"; for (let i=0;i<4;i++) ctx.fillRect(-2+i*7,-4,4,8);
+  // face on the barrel
+  ctx.fillStyle="#111"; RR(64,-9,20,8,3); ctx.fill();
+  ctx.fillStyle="rgba(120,180,255,.6)"; ctx.fillRect(68,-8,6,2);
+  ctx.strokeStyle="#3a200a"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(74,3,6,.2,Math.PI-.2); ctx.stroke();
+  ctx.strokeStyle="#ffc83d"; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.arc(52,5,9,.3,Math.PI-.3); ctx.stroke(); ctx.setLineDash([]);
+  // swing blur
+  if (swing.t > 2 && swing.t < SWING_LEN){
+    ctx.strokeStyle="rgba(255,255,255,.25)"; ctx.lineWidth=18; ctx.beginPath(); ctx.arc(0,0,78,-0.9,0); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawBall(){
+  if (ball){
+    ball.trail.forEach((p,i)=>{ ctx.globalAlpha=i/ball.trail.length*.4; ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(p.x,p.y,4,0,7); ctx.fill(); });
+    ctx.globalAlpha=1; ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(ball.x,ball.y,6,0,7); ctx.fill();
+    ctx.strokeStyle="#e8434b"; ctx.lineWidth=1.3; ctx.beginPath(); ctx.arc(ball.x-3,ball.y,4,-1,1); ctx.arc(ball.x+3,ball.y,4,Math.PI-1,Math.PI+1); ctx.stroke();
+  }
+  if (hitBall && hitBall.t <= hitBall.dur){
+    const b = hitBall, k = b.t/b.dur;
+    const r = b.kind==="homer" ? 7*(1-k*.75) : b.kind==="foul" ? 6 : 6*(1-k*.4);
+    b.trail.forEach((p,i)=>{ ctx.globalAlpha=i/b.trail.length*.5; ctx.fillStyle = b.kind==="homer"?"#ffc83d":"#fff"; ctx.beginPath(); ctx.arc(p.x,p.y,r*.8,0,7); ctx.fill(); });
+    ctx.globalAlpha=1; ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(b.x,b.y,r,0,7); ctx.fill();
+  }
+}
+function drawHUD(){
+  // scoreboard
+  ctx.fillStyle="rgba(5,9,18,.85)"; ctx.strokeStyle="#1e2a4a"; ctx.lineWidth=2; RR(10,52,W-20,58,12); ctx.fill(); ctx.stroke();
+  text("SCORE",60,70,11,"#9aa6c7","center","Inter"); text(String(total),60,92,20,"#fff");
+  text("HR",160,70,11,"#9aa6c7","center","Inter"); text(String(homers),160,92,20,"#ffc83d");
+  text("STREAK",250,70,11,"#9aa6c7","center","Inter"); text(streak>1?`${Math.min(5,streak)}x`:"—",250,92,20,"#7bff9e");
+  text("STRIKES",350,70,11,"#9aa6c7","center","Inter");
+  for (let i=0;i<3;i++){ ctx.fillStyle = i<strikes ? "#ff4d5a" : "#26304f"; ctx.beginPath(); ctx.arc(330+i*20,93,7,0,7); ctx.fill(); }
+  if (msg){
+    ctx.globalAlpha = Math.min(1, msg.life/20);
+    if (msg.small) text(msg.t, W/2, 150, 14, msg.c, "center", "Inter");
+    else { text(msg.t, W/2, 190, msg.t.length>16?24:30, msg.c); if (msg.sub) text(msg.sub, W/2, 228, 16, "#fff", "center", "Inter"); }
+    ctx.globalAlpha = 1;
+  }
+  text("Tap / Space to swing", W/2, 650, 14, "#5f6c93", "center", "Inter");
+}
+function drawTitle(){
+  ctx.fillStyle="rgba(5,9,18,.72)"; ctx.fillRect(0,0,W,H);
+  text("BATT WILLIAMS", W/2, 200, 36, "#ffc83d");
+  text("BASEBALL", W/2, 248, 44);
+  text("Time your swing. Send it over the moon.", W/2, 300, 15, "#cdd5ee", "center", "Inter");
+  const rows = [["Perfect timing","Home run · 2x pts"],["Dead-center","Hits the moon 🌕"],["Homer streak","Up to 5x multiplier"],["3 strikes","Game over"]];
+  rows.forEach(([a,b],i)=>{ text(a, 110, 360+i*30, 14, "#fff", "left", "Inter"); text(b, 310, 360+i*30, 14, "#9aa6c7", "right", "Inter"); });
+  if (best) text(`BEST ${best}  ·  LONGEST ${bestHR} FT`, W/2, 500, 15, "#ffc83d", "center", "Inter");
+  if ((frame>>5)%2) text("TAP TO PLAY BALL", W/2, 560, 22, "#fff");
+}
+function drawOver(){
+  ctx.fillStyle="rgba(5,9,18,.6)"; ctx.fillRect(0,0,W,H);
+  const py = Math.max(150, 260 - overT*3);
+  ctx.fillStyle="rgba(11,18,36,.95)"; ctx.strokeStyle="#ffc83d"; ctx.lineWidth=3; RR(34,py,W-68,360,18); ctx.fill(); ctx.stroke();
+  text("YOU'RE OUT!", W/2, py+44, 32, "#ff4d5a");
+  const stats = [["SCORE", total, "#fff"],["HOME RUNS", homers, "#ffc83d"],["LONGEST", longest ? longest+" FT" : "—", "#7bff9e"],["BEST", best, "#ffc83d"]];
+  stats.forEach(([k,v,c],i)=>{ const x = i%2 ? W-120 : 120, y = py + 100 + Math.floor(i/2)*78;
+    text(k, x, y, 12, "#9aa6c7", "center", "Inter"); text(String(v), x, y+30, 26, c); });
+  if (newBest) text("NEW HIGH SCORE!", W/2, py+262, 16, "#7bff9e", "center", "Inter");
+  shareBtn.y = py + 282;
+  ctx.fillStyle="#ffc83d"; RR(shareBtn.x, shareBtn.y, shareBtn.w, shareBtn.h, 22); ctx.fill();
+  ctx.fillStyle="#1a1000"; ctx.font="800 15px Inter"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("Share on X", W/2, shareBtn.y+22);
+  if (overT > 50) text("Tap to play again", W/2, py+345, 14, "#cdd5ee", "center", "Inter");
+}
+
+function render(){
+  ctx.save();
+  if (shake>.5) ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
+  drawScene(); drawPitcher(); drawKattBatt(); drawBall();
+  for (const p of parts){ ctx.globalAlpha=Math.max(0,p.life/40); ctx.fillStyle=p.c; ctx.fillRect(p.x,p.y,p.s,p.s); }
+  ctx.globalAlpha=1;
+  if (state!=="title") drawHUD();
+  if (state==="title") drawTitle();
+  if (state==="over") drawOver();
+  if (flash>.02){ ctx.fillStyle=`rgba(255,240,200,${flash*.5})`; ctx.fillRect(0,0,W,H); }
+  ctx.restore();
+}
+
+reset(); state = "title";
+let last = performance.now(), acc = 0;
+function loop(now){
+  acc += Math.min(100, now-last); last = now;
+  while (acc >= 1000/60){ update(); acc -= 1000/60; }
+  render(); requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Batt Williams · $KATTBATT</title>
+<meta name="description" content="Batt Williams — $KATTBATT, the bat that swings back. Buy, play, and follow.">
+<meta name="theme-color" content="#050912">
+<meta property="og:title" content="Batt Williams · $KATTBATT">
+<meta property="og:description" content="$KATTBATT — the bat that swings back.">
+<meta property="og:type" content="website">
+<!-- Change these two to your new domain once it's live -->
+<meta property="og:url" content="https://kattbatt.com/">
+<meta property="og:image" content="https://kattbatt.com/assets/bg-batt-williams.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#050912; --bg2:#0b1224; --card:#0f1830; --line:#1e2a4a;
+    --text:#eef2ff; --muted:#9aa6c7; --gold:#ffc83d; --gold2:#ff9f1a; --red:#e8434b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+
+  /* Nav */
+  nav{position:sticky;top:0;z-index:50;background:rgba(5,9,18,.82);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:62px;gap:12px}
+  .brand{font-family:Bungee,sans-serif;font-size:1.15rem;letter-spacing:.5px}
+  .brand span{color:var(--gold)}
+  .nav-right{display:flex;align-items:center;gap:14px}
+  .ticker{font-family:"JetBrains Mono",monospace;color:var(--muted);font-size:.9rem}
+
+  /* Buttons */
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:999px;font-weight:800;font-size:.95rem;border:2px solid transparent;transition:transform .15s,box-shadow .15s,background .15s;cursor:pointer}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#1a1000;box-shadow:0 6px 24px rgba(255,180,40,.35)}
+  .btn-gold:hover{box-shadow:0 10px 32px rgba(255,180,40,.5)}
+  .btn-ghost{border-color:var(--line);background:rgba(255,255,255,.03)}
+  .btn-ghost:hover{border-color:var(--gold)}
+  .btn-sm{padding:8px 16px;font-size:.85rem}
+
+  /* Hero */
+  .hero{position:relative;text-align:center;background:radial-gradient(ellipse at 50% 0%,#14224d 0%,var(--bg) 70%)}
+  .banner{display:block;width:100%;height:auto;aspect-ratio:3/1;object-fit:cover;
+    -webkit-mask-image:linear-gradient(180deg,#000 82%,transparent 100%);mask-image:linear-gradient(180deg,#000 82%,transparent 100%)}
+  .hero .wrap{padding-top:18px;padding-bottom:64px}
+  .hero h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .tag{font-family:Bungee,sans-serif;font-size:clamp(1.2rem,3.4vw,1.8rem);color:var(--gold);margin:0 0 24px;text-shadow:0 0 30px rgba(255,200,61,.35)}
+  .cta{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+  .ca-pill{margin:26px auto 0;display:inline-flex;align-items:center;gap:10px;padding:8px 8px 8px 16px;border:1px solid var(--line);border-radius:999px;background:rgba(15,24,48,.8);font-family:"JetBrains Mono",monospace;font-size:.9rem}
+  .ca-pill b{color:var(--muted);font-weight:500}
+
+  /* Sections */
+  section{padding:84px 0}
+  .eyebrow{font-family:"JetBrains Mono",monospace;color:var(--gold);text-transform:uppercase;letter-spacing:3px;font-size:.78rem}
+  h2{font-family:Bungee,sans-serif;font-size:clamp(1.8rem,5vw,2.6rem);margin:6px 0 28px}
+  .alt{background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+
+  .video{position:relative;aspect-ratio:16/9;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:#000;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .video-fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:20px;
+    background:radial-gradient(circle at 50% 40%,#18264f,#050912)}
+
+  .about p{color:#cdd5ee;font-size:1.08rem;max-width:760px;margin-bottom:18px}
+  .about p strong{color:var(--text)}
+
+  .games{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px}
+  .game{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;transition:transform .2s,border-color .2s}
+  .game:hover{transform:translateY(-4px);border-color:var(--gold)}
+  .game .thumb{aspect-ratio:16/10;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-size:3.5rem}
+  .g1{background-image:url("assets/flappy.jpg"),linear-gradient(135deg,#132a5e,#3a1e5e)}
+  .g2{background-image:url("assets/baseball.jpg"),linear-gradient(135deg,#0f3d2e,#1b2b5c)}
+  .game .body{padding:20px 22px 24px}
+  .game h3{font-size:1.3rem;margin-bottom:4px}
+  .game p{color:var(--muted);margin-bottom:14px}
+  .play{color:var(--gold);font-weight:800}
+
+  .ca-box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px}
+  .ca-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:20px}
+  .ca-row code{flex:1 1 360px;font-family:"JetBrains Mono",monospace;font-size:.95rem;background:#060b18;border:1px solid var(--line);padding:14px 16px;border-radius:12px;word-break:break-all;color:var(--gold)}
+  .links{display:flex;flex-wrap:wrap;gap:10px}
+  .warn{margin-top:18px;color:var(--muted);font-size:.92rem}
+
+  footer{padding:46px 0 60px;border-top:1px solid var(--line);text-align:center;color:var(--muted);font-size:.9rem}
+  footer .brand{display:block;margin-bottom:14px;color:var(--text)}
+  .foot-links{display:flex;flex-wrap:wrap;justify-content:center;gap:18px;margin-bottom:22px}
+  .foot-links a:hover{color:var(--gold)}
+  footer p{max-width:680px;margin:8px auto}
+
+  .toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,40px);opacity:0;background:var(--gold);color:#1a1000;font-weight:800;padding:10px 20px;border-radius:999px;transition:all .25s;z-index:99}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  @media (max-width:600px){
+    .ticker{display:none}
+    section{padding:64px 0}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a href="#top" class="brand">Batt <span>Williams</span></a>
+    <div class="nav-right">
+      <span class="ticker">$KATTBATT</span>
+      <a class="btn btn-gold btn-sm js-buy" href="#" target="_blank" rel="noopener">Buy</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <img class="banner" src="assets/bg-batt-williams.jpg" alt="$KATTBATT — live comedy videos streaming on Pump.fun and YouTube" width="1500" height="500">
+  <div class="wrap">
+    <h1>Batt Williams · $KATTBATT</h1>
+    <p class="tag">The bat that swings back.</p>
+    <div class="cta">
+      <a class="btn btn-gold js-buy" href="#" target="_blank" rel="noopener">Buy $KATTBATT</a>
+      <a class="btn btn-ghost js-x" href="#" target="_blank" rel="noopener">Follow on X</a>
+      <a class="btn btn-ghost js-yt" href="#" target="_blank" rel="noopener">YouTube</a>
+    </div>
+    <div class="ca-pill">
+      <b>CA</b> <span class="js-ca-short"></span>
+      <button class="btn btn-gold btn-sm js-copy" type="button">Copy CA</button>
+    </div>
+  </div>
+</header>
+
+<section id="watch">
+  <div class="wrap">
+    <div class="eyebrow">Video</div>
+    <h2>Watch</h2>
+    <div class="video" id="videoBox">
+      <div class="video-fallback">
+        <div style="font-size:3rem">🦇⚾</div>
+        <p>Catch the latest on the channel.</p>
+        <a class="btn btn-gold js-yt" href="#" target="_blank" rel="noopener">Watch on YouTube</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt about" id="about">
+  <div class="wrap">
+    <div class="eyebrow">About</div>
+    <h2>About</h2>
+    <p><strong>Batt Williams</strong> is a community meme-coin project on Solana built around KattBatt, a bat-winged baseball bat character. The project runs a looping video channel on YouTube and two free browser games — Flappy KATTBATT and Batt Williams Baseball — that anyone can play in a browser with no sign-up and no wallet connection.</p>
+    <p>The <strong>$KATTBATT</strong> token trades on pump.fun. The only official contract address is the one shown on this page; it is also linked from the project's X and YouTube accounts. Anything listing a different address is not this project.</p>
+  </div>
+</section>
+
+<section id="games">
+  <div class="wrap">
+    <div class="eyebrow">Games</div>
+    <h2>Play the games</h2>
+    <div class="games">
+      <a class="game js-flappy" href="games/flappy.html">
+        <div class="thumb g1"></div>
+        <div class="body">
+          <h3>Flappy KATTBATT</h3>
+          <p>One button. Don't hit the buildings.</p>
+          <span class="play">Play now →</span>
+        </div>
+      </a>
+      <a class="game js-baseball" href="games/baseball.html">
+        <div class="thumb g2"></div>
+        <div class="body">
+          <h3>Batt Williams Baseball</h3>
+          <p>Time your swing. Send it over the moon.</p>
+          <span class="play">Play now →</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="ca">
+  <div class="wrap">
+    <div class="eyebrow">Contract Address (CA)</div>
+    <h2>Official CA</h2>
+    <div class="ca-box">
+      <div class="ca-row">
+        <code class="js-ca-full"></code>
+        <button class="btn btn-gold js-copy" type="button">Copy CA</button>
+      </div>
+      <div class="links">
+        <a class="btn btn-ghost btn-sm js-buy" href="#" target="_blank" rel="noopener">View on pump.fun ↗</a>
+        <a class="btn btn-ghost btn-sm js-x" href="#" target="_blank" rel="noopener">X / @KattBatt_ ↗</a>
+        <a class="btn btn-ghost btn-sm js-yt" href="#" target="_blank" rel="noopener">YouTube / @kattbatt ↗</a>
+      </div>
+      <p class="warn">Always double-check the address before buying. Any other address is not this project.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="brand">Batt <span style="color:var(--gold)">Williams</span> · $KATTBATT</span>
+    <div class="foot-links">
+      <a class="js-x" href="#" target="_blank" rel="noopener">X</a>
+      <a class="js-yt" href="#" target="_blank" rel="noopener">YouTube</a>
+      <a class="js-flappy" href="games/flappy.html">Flappy</a>
+      <a class="js-baseball" href="games/baseball.html">Baseball</a>
+      <a class="js-buy" href="#" target="_blank" rel="noopener">Buy</a>
+    </div>
+    <p><strong>Not financial advice.</strong> Meme coin — do your own research.</p>
+    <p>Batt Williams / $KATTBATT is a fan-made parody project. It is not affiliated with, sponsored by, or endorsed by Katt Williams or any of his representatives. Not financial advice.</p>
+  </div>
+</footer>
+
+<div class="toast" id="toast">CA copied ✓</div>
+
+<script>
+/* ===== EDIT EVERYTHING HERE ===== */
+const CONFIG = {
+  ca:       "BqQFxjszd1MkfuJGT6tqcC6fuhvAC88cLGeGmk8opump",
+  buy:      "https://pump.fun/coin/BqQFxjszd1MkfuJGT6tqcC6fuhvAC88cLGeGmk8opump",
+  x:        "https://x.com/KattBatt_",
+  youtube:  "https://www.youtube.com/@kattbatt",
+  flappy:   "games/flappy.html",
+  baseball: "games/baseball.html",
+  // Paste a YouTube video ID (the part after watch?v=) to embed it in the Watch section.
+  // Leave blank to show the "Watch on YouTube" button instead.
+  youtubeVideoId: ""
+};
+/* ================================ */
+
+const setLinks = (cls, url) => document.querySelectorAll(cls).forEach(a => a.href = url);
+setLinks(".js-buy", CONFIG.buy);
+setLinks(".js-x", CONFIG.x);
+setLinks(".js-yt", CONFIG.youtube);
+setLinks(".js-flappy", CONFIG.flappy);
+setLinks(".js-baseball", CONFIG.baseball);
+
+document.querySelectorAll(".js-ca-full").forEach(el => el.textContent = CONFIG.ca);
+document.querySelectorAll(".js-ca-short").forEach(el => el.textContent = CONFIG.ca.slice(0,6) + "…" + CONFIG.ca.slice(-6));
+
+if (CONFIG.youtubeVideoId) {
+  document.getElementById("videoBox").innerHTML =
+    `<iframe src="https://www.youtube.com/embed/${CONFIG.youtubeVideoId}?autoplay=1&mute=1&loop=1&playlist=${CONFIG.youtubeVideoId}&rel=0"
+      title="KattBatt video" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+}
+
+const toast = document.getElementById("toast");
+function copyCA(){
+  const done = () => { toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 1600); };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(CONFIG.ca).then(done);
+  } else {
+    const t = document.createElement("textarea"); t.value = CONFIG.ca; document.body.appendChild(t);
+    t.select(); document.execCommand("copy"); t.remove(); done();
+  }
+}
+document.querySelectorAll(".js-copy").forEach(b => b.addEventListener("click", copyCA));
+</script>
+</body>
+</html>
