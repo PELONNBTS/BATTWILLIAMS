@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Flappy KATTBATT · $KATTBATT</title>
 <meta name="theme-color" content="#050912">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@600;800&display=swap" rel="stylesheet">
@@ -12,8 +12,8 @@
   body{display:flex;align-items:center;justify-content:center;font-family:Inter,system-ui,sans-serif;color:#eef2ff}
   #stage{position:relative}
   canvas{display:block;border-radius:14px;box-shadow:0 0 60px rgba(40,70,160,.35)}
-  .hud{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;pointer-events:none}
-  .chip{pointer-events:auto;background:rgba(5,9,18,.7);border:1px solid #1e2a4a;border-radius:999px;padding:6px 12px;font-weight:800;font-size:13px;color:#eef2ff;text-decoration:none;cursor:pointer}
+  .hud{position:absolute;top:calc(12px + env(safe-area-inset-top));left:12px;right:12px;display:flex;justify-content:space-between;pointer-events:none;z-index:10}
+  .chip{pointer-events:auto;-webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:40px;display:inline-flex;align-items:center;background:rgba(5,9,18,.85);border:1px solid #6a4bd0;border-radius:999px;padding:8px 16px;font-weight:800;font-size:15px;font-family:Inter,system-ui,sans-serif;color:#eef2ff;text-decoration:none;cursor:pointer}
   .chip:hover{border-color:#ffc83d}
 </style>
 </head>
@@ -21,7 +21,7 @@
 <div id="stage">
   <canvas id="c"></canvas>
   <div class="hud">
-    <a class="chip" href="../index.html">← Home</a>
+    <a class="chip" id="homeBtn" href="/">← Home</a>
     <button class="chip" id="mute" type="button">🔊</button>
   </div>
 </div>
@@ -422,6 +422,16 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+})();
+
+/* Home button: go to the main page no matter how it's tapped */
+(() => {
+  const home = document.getElementById("homeBtn");
+  const go = e => { e.preventDefault(); e.stopPropagation(); location.href = "/"; };
+  home.addEventListener("pointerup", go);
+  home.addEventListener("touchend", go, {passive:false});
+  home.addEventListener("click", go);
+  window.addEventListener("keydown", e => { if (e.key === "Escape") location.href = "/"; });
 })();
 </script>
 </body>
