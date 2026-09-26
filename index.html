@@ -189,7 +189,7 @@
       <div class="links">
         <a class="btn btn-ghost btn-sm js-buy" href="#" target="_blank" rel="noopener">View on pump.fun ↗</a>
         <a class="btn btn-ghost btn-sm js-x" href="#" target="_blank" rel="noopener">X / @KattBatt_ ↗</a>
-        <a class="btn btn-ghost btn-sm js-yt" href="#" target="_blank" rel="noopener">YouTube / @kattbatt ↗</a>
+        <a class="btn btn-ghost btn-sm js-yt" href="#" target="_blank" rel="noopener">YouTube / @KATTBATT ↗</a>
       </div>
       <p class="warn">Always double-check the address before buying. Any other address is not this project.</p>
     </div>
@@ -219,12 +219,12 @@ const CONFIG = {
   ca:       "BqQFxjszd1MkfuJGT6tqcC6fuhvAC88cLGeGmk8opump",
   buy:      "https://pump.fun/coin/BqQFxjszd1MkfuJGT6tqcC6fuhvAC88cLGeGmk8opump",
   x:        "https://x.com/KattBatt_",
-  youtube:  "https://www.youtube.com/@kattbatt",
+  youtube:  "https://www.youtube.com/@KATTBATT",
   flappy:   "games/flappy.html",
   baseball: "games/baseball.html",
   // Paste a YouTube video ID (the part after watch?v=) to embed it in the Watch section.
   // Leave blank to show the "Watch on YouTube" button instead.
-  youtubeVideoId: ""
+  youtubeVideoId: "DXZrYRGH0c0"
 };
 /* ================================ */
 
@@ -240,7 +240,7 @@ document.querySelectorAll(".js-ca-short").forEach(el => el.textContent = CONFIG.
 
 if (CONFIG.youtubeVideoId) {
   document.getElementById("videoBox").innerHTML =
-    `<iframe src="https://www.youtube.com/embed/${CONFIG.youtubeVideoId}?autoplay=1&mute=1&loop=1&playlist=${CONFIG.youtubeVideoId}&rel=0"
+    `<iframe src="https://www.youtube.com/embed/${CONFIG.youtubeVideoId}?rel=0"
       title="KattBatt video" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
 }
 
