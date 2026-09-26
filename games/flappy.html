@@ -101,7 +101,7 @@ let bat, towers, coins, parts, score, coinCount, best = store.get("kb_best", 0),
 function reset(){
   bat = { x: 110, y: H*.42, vy: 0, rot: 0, wing: 0 };
   towers = []; coins = []; parts = []; popups = [];
-  score = 0; coinCount = 0; speed = 2.6; gap = 190; spawnT = 0; deadT = 0; newBest = false;
+  score = 0; coinCount = 0; speed = 2.6; gap = 200; spawnT = 0; deadT = 0; newBest = false;
 }
 reset();
 
@@ -219,7 +219,7 @@ function drawCoin(c){
 }
 function drawBat(){
   if (heroOK){
-    const h = 132, sc = h / hero.naturalHeight, w = hero.naturalWidth * sc;
+    const h = 90, sc = h / hero.naturalHeight, w = hero.naturalWidth * sc;
     const bob = state==="dead" ? 0 : Math.sin(frame*.3)*2.5;
     const flapS = state==="dead" ? 1 : 1 + Math.sin(frame*.45 + bat.wing*4)*.035;   // subtle wing "breathing"
     ctx.save(); ctx.translate(bat.x + 4, bat.y + bob); ctx.rotate(bat.rot*.55); ctx.scale(flapS, 1/flapS);
@@ -313,7 +313,7 @@ function update(){
       t.x -= speed;
       if (!t.passed && t.x + t.w < bat.x){
         t.passed = true; score++; sfx.point();
-        if (score % 10 === 0){ speed = Math.min(5.2, speed + .3); gap = Math.max(140, gap - 8); popups.push({t:"SPEED UP!", x:W/2, y:200, life:60, c:"#ff4d5a"}); }
+        if (score % 10 === 0){ speed = Math.min(5.2, speed + .3); gap = Math.max(150, gap - 8); popups.push({t:"SPEED UP!", x:W/2, y:200, life:60, c:"#ff4d5a"}); }
       }
     }
     towers = towers.filter(t => t.x + t.w > -20);
@@ -328,7 +328,7 @@ function update(){
     coins = coins.filter(c => c.x > -30 && !c.got);
 
     // collisions (bat hitbox ~ ellipse)
-    const r = heroOK ? 26 : 14, rx = heroOK ? 24 : 22;   // forgiving box around his body (wing tips can clip)
+    const r = heroOK ? 16 : 14, rx = heroOK ? 16 : 22;   // forgiving box around his body (wing tips can clip)
     let dead = bat.y + r > GROUND || bat.y - r < -40;
     for (const t of towers){
       if (bat.x + rx > t.x-5 && bat.x - rx < t.x + t.w + 5){
@@ -344,7 +344,7 @@ function update(){
   }
   if (state === "dead"){
     deadT++;
-    if (bat.y < GROUND - (heroOK?50:14)){ bat.vy += GRAV; bat.y = Math.min(GROUND-(heroOK?50:14), bat.y + bat.vy); bat.rot = Math.min(1.6, bat.rot + .08); }
+    if (bat.y < GROUND - (heroOK?34:14)){ bat.vy += GRAV; bat.y = Math.min(GROUND-(heroOK?34:14), bat.y + bat.vy); bat.rot = Math.min(1.6, bat.rot + .08); }
   }
   for (const p of parts){ p.x += p.vx; p.y += p.vy; p.vy += .1; p.life--; }
   parts = parts.filter(p => p.life > 0);
