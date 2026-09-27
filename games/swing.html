@@ -72,6 +72,17 @@ function noise(dur, vol=.25){
     s.buffer = b; s.connect(g).connect(actx.destination); s.start();
   }catch(e){}
 }
+function say(t){
+  if (muted || !window.speechSynthesis) return;
+  try{
+    const u = new SpeechSynthesisUtterance(t);
+    u.rate = 1.15; u.pitch = .55; u.volume = 1;
+    const vs = speechSynthesis.getVoices();
+    const v = vs.find(v => /^en/i.test(v.lang) && /(male|david|fred|daniel|alex|guy|aaron|arthur)/i.test(v.name)) || vs.find(v => /^en/i.test(v.lang));
+    if (v) u.voice = v;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }catch(e){}
+}
 const sfx = {
   swing: () => tone(260,.12,"triangle",.05,-160),
   bonk:  () => { noise(.12,.35); tone(700,.1,"square",.06,-450); },
@@ -79,7 +90,9 @@ const sfx = {
   ouch:  () => tone(180,.35,"sawtooth",.09,-100),
   bad:   () => [300,220].forEach((f,i)=>tone(f,.2,"square",.06,0,i*.15)),
   over:  () => [392,330,262,196].forEach((f,i)=>tone(f,.25,"triangle",.08,0,i*.18)),
-  coin:  () => { tone(1200,.05,"square",.04); tone(1800,.08,"square",.04,0,.05); }
+  coin:  () => { tone(1200,.05,"square",.04); tone(1800,.08,"square",.04,0,.05); },
+  power: () => [440,660,880,1320].forEach((f,i)=>tone(f,.12,"square",.05,0,i*.06)),
+  shield:() => [880,660].forEach((f,i)=>tone(f,.15,"triangle",.07,0,i*.1))
 };
 
 /* ---------- art ---------- */
@@ -93,6 +106,12 @@ const CITY_Y = 306.7, CITY_W = 1280.0, CITY_H = 413.3;
 /* ---------- constants ---------- */
 const KNOB = {x: 92, y: GROUND - 22};         // KattBatt's handle position (pivot)
 const HIT_MIN = 138, HIT_MAX = 262, SWEET = 200;
+const zone = () => power && power.big > 0 ? {min:128, max:318, sweet:220} : {min:HIT_MIN, max:HIT_MAX, sweet:SWEET};
+const PU = {
+  big:    {icon:"💪", label:"BIG BATT",       color:"#ffc83d", dur:540},
+  x2:     {icon:"2X", label:"DOUBLE POINTS",  color:"#7bff9e", dur:600},
+  shield: {icon:"💎", label:"DIAMOND SHIELD", color:"#6ad1ff", dur:0}
+};
 const SWING_LEN = 16, CONTACT_F = 6, RECOVER = 10;
 const REST_A = -0.38, SWING_A = 0.72;
 const JEET_SIGNS = ["SOLD","JEET","DUMP","-90%","PAPER","EXIT"];
@@ -101,11 +120,13 @@ const HOODIES = ["#d6455a","#e0703a","#b8475e","#c43c3c","#e25c8a"];
 /* ---------- state ---------- */
 let state = "title", frame = 0, best = store.get("kb_jeet_best", 0);
 let score, combo, bestCombo, lives, kos, walkers, parts, pops, swing, shake, flash, spawnT, cityX, level, overT, newBest;
+let power, pickups, puT, bubble, lastSay, sizeK;
 
 function reset(){
   score = 0; combo = 0; bestCombo = 0; lives = 3; kos = 0; level = 0;
-  walkers = []; parts = []; pops = []; shake = 0; flash = 0; spawnT = 60; cityX = 0; overT = 0; newBest = false;
+  walkers = []; parts = []; pops = []; shake = 0; flash = 0; spawnT = 30; cityX = 0; overT = 0; newBest = false;
   swing = {t:-1, hitDone:false, cool:0};
+  power = {big:0, x2:0, shield:0}; pickups = []; puT = 420; bubble = null; lastSay = 0; sizeK = 1;
 }
 reset();
 
@@ -116,7 +137,7 @@ function spawn(){
   if (lv >= 1 && r < .16) type = "whale";
   else if (r > .80 - Math.min(.12, lv*.02)) type = Math.random() < .35 ? "boo" : "holder";
   else if (lv >= 2 && r < .30) type = "runner";
-  const base = 1.7 + lv*.22;
+  const base = 2.7 + lv*.24;
   const w = {
     type, x: W + 30, y: GROUND, t: Math.random()*10, state: "walk",
     speed: type==="runner" ? base*1.8 : type==="whale" ? base*.75 : type==="boo" ? base*.9 : base*(0.9+Math.random()*.3),
@@ -166,47 +187,64 @@ function batAngle(){
   const e = (k-.45)/.55; return SWING_A + (REST_A-SWING_A) * (e*e);
 }
 function doContact(){
-  // find closest walker inside the hit zone
-  let target = null, bestD = 1e9;
-  for (const w of walkers){
-    if (w.state !== "walk") continue;
-    if (w.x > HIT_MIN && w.x < HIT_MAX){
-      const d = Math.abs(w.x - SWEET);
-      if (d < bestD){ bestD = d; target = w; }
+  const Z = zone(), big = power.big > 0;
+  // power-ups can be swung at to grab them early
+  for (const p of pickups) if (!p.got && p.x > Z.min - 20 && p.x < Z.max + 20) grab(p);
+  let targets = walkers.filter(w => w.state === "walk" && w.x > Z.min && w.x < Z.max);
+  if (!targets.length){ combo = 0; swing.cool = RECOVER; return; }   // whiff
+  targets.sort((a,b) => Math.abs(a.x-Z.sweet) - Math.abs(b.x-Z.sweet));
+  if (!big) targets = [targets[0]];                                    // normal: one at a time
+  let koThisSwing = 0;
+  for (const target of targets){
+    const d = Math.abs(target.x - Z.sweet);
+    const q = 1 - Math.min(1, d / ((Z.max-Z.min)/2));
+    if (target.type === "holder" || target.type === "boo"){
+      if (big && targets.length > 1) continue;                          // big sweep skips holders
+      lives--; combo = 0; shake = 10; flash = .5; sfx.bad();
+      target.state = "ko"; target.vx = 5; target.vy = -7; target.spin = .15;
+      pops.push({t: target.type==="boo" ? "NOT BOO BOO!" : "THAT'S A HOLDER!", x:W/2, y:230, c:"#ff4d5a", life:80, big:true});
+      pops.push({t:"-1 💰", x:target.x, y:target.y-110, c:"#ff4d5a", life:60});
+      if (lives <= 0) gameOver();
+      return;
     }
+    shake = Math.max(shake, (big ? 12 : 6) + q*10);
+    for (let i=0;i<(big?24:14);i++) parts.push({x:target.x-10, y:target.y-80*target.scale, vx:Math.random()*7-1, vy:(Math.random()-.5)*8, life:26, c:i%2?"#fff":"#ffc83d", s:big?4:3});
+    if (target.hp > 1 && !big){
+      target.hp--; target.knock = 18; target.x += 40;
+      pops.push({t:"WHALE! HIT AGAIN", x:target.x, y:target.y-150, c:"#6ad1ff", life:50});
+      continue;
+    }
+    combo++; bestCombo = Math.max(bestCombo, combo); kos++; koThisSwing++;
+    const mult = Math.min(8, 1 + Math.floor(combo/3)) * (power.x2 > 0 ? 2 : 1);
+    const perfect = q > .82;
+    let pts = (target.type==="whale" ? 300 : target.type==="runner" ? 150 : 100) * mult;
+    if (perfect) pts *= 2;
+    score += pts;
+    target.state = "ko";
+    const boost = big ? 1.5 : 1;
+    target.vx = (7 + q*8)*boost; target.vy = -(9 + q*9)*boost; target.spin = .25 + q*.3;
+    if (perfect){ target.moon = true; target.vx = 9; target.vy = -17; sfx.moon(); flash = .35; }
+    const word = perfect ? "TO THE MOON!" : ["BONK!","WHAM!","KNOCKED OUT!","BATTED!","SWUNG ON!"][Math.floor(Math.random()*5)];
+    pops.push({t: word, x: Math.min(W-90, target.x+20), y: target.y-150*target.scale, c: perfect ? "#ffc83d" : "#fff", life:55, big:true});
+    pops.push({t:`+${pts}${mult>1?`  ${mult}x`:""}`, x: Math.min(W-70, target.x+20), y: target.y-115*target.scale, c:"#7bff9e", life:50});
+    if (Math.random() < .35) parts.push({coin:true, x:target.x, y:target.y-60, vx:-2-Math.random()*2, vy:-6, life:90, c:"#ffc83d", s:9});
   }
-  if (!target){ combo = 0; swing.cool = RECOVER; return; }   // whiff
-  const q = 1 - Math.min(1, bestD / ((HIT_MAX-HIT_MIN)/2));
-  if (target.type === "holder" || target.type === "boo"){
-    // hit a holder: penalty
-    lives--; combo = 0; shake = 10; flash = .5; sfx.bad();
-    target.state = "ko"; target.vx = 5; target.vy = -7; target.spin = .15;
-    pops.push({t: target.type==="boo" ? "NOT BOO BOO!" : "THAT'S A HOLDER!", x:W/2, y:230, c:"#ff4d5a", life:80, big:true});
-    pops.push({t:"-1 💰", x:target.x, y:target.y-110, c:"#ff4d5a", life:60});
-    if (lives <= 0) gameOver();
-    return;
+  if (koThisSwing){
+    sfx.bonk();
+    bubble = {t: koThisSwing > 1 ? "YEAH BITCH!!" : "YEAH BITCH!", life: 48};
+    const now = performance.now();
+    if (now - lastSay > 1600){ lastSay = now; say("Yeah bitch!"); }
   }
-  sfx.bonk(); shake = 6 + q*10;
-  for (let i=0;i<14;i++) parts.push({x:target.x-10, y:target.y-80*target.scale, vx:Math.random()*7-1, vy:(Math.random()-.5)*8, life:26, c:i%2?"#fff":"#ffc83d", s:3});
-  if (target.hp > 1){
-    target.hp--; target.knock = 18; target.x += 40;
-    pops.push({t:"WHALE! HIT AGAIN", x:target.x, y:target.y-150, c:"#6ad1ff", life:50});
-    return;
-  }
-  combo++; bestCombo = Math.max(bestCombo, combo); kos++;
-  const mult = Math.min(8, 1 + Math.floor(combo/3));
-  const perfect = q > .82;
-  let pts = (target.type==="whale" ? 300 : target.type==="runner" ? 150 : 100) * mult;
-  if (perfect) pts *= 2;
-  score += pts;
-  target.state = "ko";
-  target.vx = 7 + q*8; target.vy = -(9 + q*9); target.spin = .25 + q*.3;
-  if (perfect){ target.moon = true; target.vx = 9; target.vy = -17; sfx.moon(); flash = .35; }
-  const word = perfect ? "TO THE MOON!" : ["BONK!","WHAM!","KNOCKED OUT!","BATTED!","SWUNG ON!"][Math.floor(Math.random()*5)];
-  pops.push({t: word, x: Math.min(W-90, target.x+20), y: target.y-150*target.scale, c: perfect ? "#ffc83d" : "#fff", life:55, big:true});
-  pops.push({t:`+${pts}${mult>1?`  ${mult}x`:""}`, x: Math.min(W-70, target.x+20), y: target.y-115*target.scale, c:"#7bff9e", life:50});
-  // coin drop
-  if (Math.random() < .35) parts.push({coin:true, x:target.x, y:target.y-60, vx:-2-Math.random()*2, vy:-6, life:90, c:"#ffc83d", s:9});
+}
+function grab(p){
+  if (p.got) return;
+  p.got = true; sfx.power(); flash = .25;
+  const def = PU[p.kind];
+  if (p.kind === "shield") power.shield = Math.min(2, power.shield + 1);
+  else power[p.kind] = def.dur;
+  pops.push({t: def.label + "!", x: W/2, y: 200, c: def.color, life: 70, big:true});
+  for (let i=0;i<20;i++){ const a=i/20*6.283; parts.push({x:p.x, y:p.y, vx:Math.cos(a)*4, vy:Math.sin(a)*4, life:30, c:def.color, s:3}); }
+  if (p.kind === "big"){ bubble = {t:"I'M THAT BATT!", life:60}; }
 }
 function gameOver(){
   state = "over"; overT = 0; sfx.over();
@@ -216,12 +254,12 @@ function gameOver(){
 /* ---------- update ---------- */
 function update(){
   frame++;
-  if (state !== "over") cityX += state === "play" ? 1.3 + level*.1 : .6;
+  if (state !== "over") cityX += state === "play" ? 1.9 + level*.12 : .6;
   if (state === "play"){
     level = Math.min(8, Math.floor(score / 1500));
     if (--spawnT <= 0){
       spawn();
-      const gapBase = Math.max(38, 92 - level*7);
+      const gapBase = Math.max(32, 62 - level*5);
       spawnT = gapBase + Math.random()*gapBase*.8;
     }
     if (swing.t >= 0){
@@ -230,6 +268,20 @@ function update(){
       if (swing.t > SWING_LEN){ swing.t = -1; }
     }
     if (swing.cool > 0) swing.cool--;
+    if (power.big > 0) power.big--;
+    if (power.x2 > 0) power.x2--;
+    sizeK += ((power.big > 0 ? 1.45 : 1) - sizeK) * .12;
+    if (--puT <= 0){
+      const kinds = ["big","x2","shield"];
+      pickups.push({kind: kinds[Math.floor(Math.random()*kinds.length)], x: W + 30, y: GROUND - 96, t: 0, got:false});
+      puT = 600 + Math.random()*420;                 // one every ~10-17 seconds
+    }
+    for (const p of pickups){
+      p.t += .08; p.x -= 2.2 + level*.15;
+      if (!p.got && p.x < KNOB.x + 40) grab(p);
+    }
+    pickups = pickups.filter(p => !p.got && p.x > -40);
+    if (bubble && --bubble.life <= 0) bubble = null;
     for (const w of walkers){
       w.t += .2;
       if (w.state === "walk"){
@@ -239,9 +291,15 @@ function update(){
           if (w.type === "holder" || w.type === "boo"){ w.state = "pass"; }
           else {
             // a jeet got through
-            w.state = "gone"; lives--; combo = 0; shake = 8; sfx.ouch();
-            pops.push({t:"JEET GOT AWAY! -1 💰", x:W/2, y:230, c:"#ff4d5a", life:70, big:true});
-            if (lives <= 0) gameOver();
+            w.state = "gone";
+            if (power.shield > 0){
+              power.shield--; sfx.shield(); flash = .3;
+              pops.push({t:"DIAMOND SHIELD BLOCKED IT!", x:W/2, y:230, c:"#6ad1ff", life:70, big:true});
+            } else {
+              lives--; combo = 0; shake = 8; sfx.ouch();
+              pops.push({t:"JEET GOT AWAY! -1 💰", x:W/2, y:230, c:"#ff4d5a", life:70, big:true});
+              if (lives <= 0) gameOver();
+            }
           }
         }
       } else if (w.state === "pass"){
@@ -293,8 +351,9 @@ function drawScene(){
   for (let x = -off; x < W; x += 48) ctx.fillRect(x, GROUND+34, 24, 3);
   // hit zone hint (subtle)
   if (state === "play"){
-    ctx.fillStyle = "rgba(255,200,61,.07)"; ctx.fillRect(HIT_MIN, GROUND-150, HIT_MAX-HIT_MIN, 150);
-    ctx.fillStyle = "rgba(255,200,61,.35)"; ctx.fillRect(HIT_MIN, GROUND-2, HIT_MAX-HIT_MIN, 3);
+    const Z = zone();
+    ctx.fillStyle = power.big > 0 ? "rgba(255,200,61,.13)" : "rgba(255,200,61,.07)"; ctx.fillRect(Z.min, GROUND-170, Z.max-Z.min, 170);
+    ctx.fillStyle = "rgba(255,200,61,.4)"; ctx.fillRect(Z.min, GROUND-2, Z.max-Z.min, 3);
   }
 }
 function drawKattBatt(){
@@ -302,7 +361,9 @@ function drawKattBatt(){
   const bob = state==="play" ? Math.abs(Math.sin(frame*.18))*-4 : Math.sin(frame*.08)*2;
   ctx.save(); ctx.translate(KNOB.x, KNOB.y + bob);
   // shadow
-  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(10, 22 - bob, 38, 6, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(10, 22 - bob, 38*sizeK, 6, 0, 0, 7); ctx.fill();
+  ctx.scale(sizeK, sizeK);
+  if (power.big > 0){ ctx.shadowColor = `rgba(255,200,61,${.6 + Math.sin(frame*.3)*.3})`; ctx.shadowBlur = 28; }
   ctx.rotate(a);
   if (swing.t > 1 && swing.t < SWING_LEN*.6){
     ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 30;
@@ -316,6 +377,30 @@ function drawKattBatt(){
   } else {
     ctx.fillStyle = "#d49a52"; RR(-6,-140,16,150,8); ctx.fill();
   }
+  ctx.restore();
+}
+function drawBubble(){
+  if (!bubble) return;
+  const k = Math.min(1, bubble.life/10), pop = 1 + Math.max(0, (bubble.life-40)/8)*.25;
+  const bx = KNOB.x + 70*sizeK, by = KNOB.y - 205*sizeK;
+  ctx.save(); ctx.globalAlpha = k; ctx.translate(bx, by); ctx.scale(pop, pop);
+  ctx.font = "20px Bungee, sans-serif"; const tw = ctx.measureText(bubble.t).width + 26;
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#07051a"; ctx.lineWidth = 3;
+  RR(-tw/2, -22, tw, 40, 14); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-18, 16); ctx.lineTo(-30, 34); ctx.lineTo(-2, 17); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.fillRect(-20, 13, 20, 6);
+  ctx.fillStyle = "#e8434b"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(bubble.t, 0, -1);
+  ctx.restore();
+}
+function drawPickup(p){
+  const def = PU[p.kind], bob = Math.sin(p.t*3)*8;
+  ctx.save(); ctx.translate(p.x, p.y + bob);
+  const g = ctx.createRadialGradient(0,0,4,0,0,34); g.addColorStop(0, def.color); g.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.globalAlpha = .55 + Math.sin(p.t*5)*.2; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,34,0,7); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = "#140c2a"; ctx.strokeStyle = def.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0,0,20,0,7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = def.color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = p.kind === "x2" ? "16px Bungee, sans-serif" : "20px Inter"; ctx.fillText(def.icon, 0, 1);
+  ctx.font = "900 10px Inter"; ctx.fillStyle = "#fff"; ctx.fillText(def.label, 0, 34);
   ctx.restore();
 }
 function drawWalker(w){
@@ -396,6 +481,16 @@ function drawHUD(){
   ctx.font = "18px Inter"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   for (let i=0;i<3;i++){ ctx.globalAlpha = i < lives ? 1 : .2; ctx.fillText("💰", 322+i*23, 98); }
   ctx.globalAlpha = 1;
+  // active power-ups
+  const act = [];
+  if (power.big > 0) act.push({c:PU.big.color, t:`💪 BIG ${Math.ceil(power.big/60)}s`});
+  if (power.x2 > 0) act.push({c:PU.x2.color, t:`2X ${Math.ceil(power.x2/60)}s`});
+  if (power.shield > 0) act.push({c:PU.shield.color, t:`💎 x${power.shield}`});
+  act.forEach((a,i) => {
+    const x = 16 + i*104;
+    ctx.fillStyle = "rgba(7,5,26,.8)"; ctx.strokeStyle = a.c; ctx.lineWidth = 2; RR(x, 124, 96, 28, 14); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = a.c; ctx.font = "900 13px Inter"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(a.t, x+48, 139);
+  });
   text("Tap / Space to swing", W/2, H-24, 13, "#8f86b8", "center", "Inter");
 }
 function drawTitle(){
@@ -404,10 +499,10 @@ function drawTitle(){
   text("A JEET", W/2, 222, 50);
   text("Batt Williams is walking the block.", W/2, 272, 15, "#e2e6f7", "center", "Inter");
   text("Paper hands are coming to dump his bags.", W/2, 294, 15, "#e2e6f7", "center", "Inter");
-  const rows = [["🧻 Sellers with SOLD signs","SWING!"],["💎 Holders & Boo Boo","DON'T SWING"],["Jeet gets past you","Lose a bag"],["Dead-center hit","TO THE MOON 2x"]];
-  rows.forEach(([a,b],i)=>{ text(a, 58, 350+i*30, 14, "#fff", "left", "Inter"); text(b, 362, 350+i*30, 14, i===1?"#7bff9e":"#ffc83d", "right", "Inter"); });
-  if (best) text(`BEST ${best}`, W/2, 490, 17, "#ffc83d", "center", "Inter");
-  if ((frame>>5)%2) text("TAP TO START SWINGING", W/2, 540, 20, "#fff");
+  const rows = [["🧻 Sellers with SOLD signs","SWING!"],["💎 Holders & Boo Boo","DON'T SWING"],["Jeet gets past you","Lose a bag"],["Dead-center hit","TO THE MOON 2x"],["💪 Big Batt","Giant + hits them all"],["2X / 💎 Shield","Double pts / blocks a jeet"]];
+  rows.forEach(([a,b],i)=>{ text(a, 50, 336+i*28, 13, "#fff", "left", "Inter"); text(b, 370, 336+i*28, 13, i===1?"#7bff9e":"#ffc83d", "right", "Inter"); });
+  if (best) text(`BEST ${best}`, W/2, 518, 17, "#ffc83d", "center", "Inter");
+  if ((frame>>5)%2) text("TAP TO START SWINGING", W/2, 560, 20, "#fff");
 }
 function drawOver(){
   ctx.fillStyle="rgba(7,5,26,.62)"; ctx.fillRect(0,0,W,H);
@@ -429,8 +524,10 @@ function render(){
   drawScene();
   // draw walkers behind/in front sensibly: passers & walking first, KO'd flyers on top
   walkers.filter(w => w.state !== "ko").sort((a,b)=>b.x-a.x).forEach(drawWalker);
+  pickups.forEach(drawPickup);
   drawKattBatt();
   walkers.filter(w => w.state === "ko").forEach(drawWalker);
+  drawBubble();
   for (const p of parts){
     ctx.globalAlpha = Math.max(0, Math.min(1, p.life/25));
     if (p.coin){ ctx.fillStyle="#e0a400"; ctx.beginPath(); ctx.arc(p.x,p.y,p.s,0,7); ctx.fill(); ctx.fillStyle="#ffc83d"; ctx.beginPath(); ctx.arc(p.x,p.y,p.s-2,0,7); ctx.fill(); }
@@ -446,7 +543,7 @@ function render(){
   ctx.restore();
 }
 
-window.__game = () => ({state, walkers, score, kos, lives, swing});
+window.__game = () => ({state, walkers, score, kos, lives, swing, power, pickups});
 let last = performance.now(), acc = 0;
 function loop(now){
   acc += Math.min(100, now-last); last = now;
