@@ -1232,7 +1232,7 @@ const Net = (function () {
 
   const MESSAGES = {
     offline: "Can't reach the game server. Check your connection.",
-    bad_name: "Pick a name: 2-16 letters, numbers, spaces, _ - or @.",
+    bad_name: "Type a name or your @X handle: 2-16 letters, numbers, spaces, _ or -.",
     name_not_allowed: "That name isn't allowed. Pick another one.",
     slow_down: "Easy there! Give it a minute and try again.",
     session_expired: "That set took too long to submit.",
@@ -1371,7 +1371,7 @@ function check(i) {          // refuse pictures with the wrong proportions (guar
   if (i === boo && !(r > 0.58 && r < 0.72)) i.ok = false;
   Art.setAssets({ hero, boo });
 }
-function loadImg(src) { return new Promise(res => { const i = new Image(); i.ok = false; i.onload = () => res(i); i.onerror = () => res(null); i.src = src; }); }
+function loadImg(src) { return new Promise(res => { const i = new Image(); i.ok = false; i.onload = () => { i.ok = true; res(i); }; i.onerror = () => res(null); i.src = src; }); }
 async function loadArt() {
   // 1) the picture files next to the game (punchline-assets/), 2) pictures borrowed from swing.html, 3) vector stand-ins
   const heroSrc = CFG.HERO_URL || "punchline-assets/kattbatt.png", booSrc = CFG.BOO_URL || "punchline-assets/booboo.png";
@@ -1480,7 +1480,7 @@ function hideAll() { show(null); }
 function setMsg(id, text, kind) { const el = $(id); el.textContent = text || ""; el.className = "msg" + (kind ? " " + kind : ""); }
 
 function readName() {
-  const raw = $("nameIn").value.replace(/\s+/g, " ").trim();
+  const raw = $("nameIn").value.replace(/\s+/g, " ").trim().replace(/^@+/, "");   // "@handle" works: the leading @ is dropped
   if (!/^[A-Za-z0-9][A-Za-z0-9 _@-]{1,15}$/.test(raw)) return null;
   store.set("kb_punch_name", raw); return raw;
 }
